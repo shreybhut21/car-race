@@ -1,0 +1,1 @@
+export function createStartScreen(root, start) { const button = root.querySelector('[data-start]'); button.addEventListener('click', () => { root.querySelector('[data-menu]').classList.add('hud__hidden'); start(); }); }
