@@ -34,10 +34,11 @@ export class CarEffects {
 
     update(delta, physics, input) {
         const dt = Math.min(delta, 0.05);
+        const speedRatio = physics.speedNormalized;
+        const forwardSpeed = physics.forwardSpeed;
 
         // ── 1. Dynamic Body Roll & Pitch Visual Effects ────────────────────────
         if (this.car.visual) {
-            const speedRatio = physics.speedNormalized;
             const steer = physics.smoothedSteer;
 
             // Roll lean: car body rolls away from turn based on steering & speed
@@ -50,10 +51,10 @@ export class CarEffects {
 
             // Pitch squat/dive: nose dips on heavy braking, squats slightly on hard acceleration
             let targetPitch = 0;
-            if (input.throttle > 0 && physics.forwardSpeed > 0) {
-                targetPitch = -0.018 * (1 - speedRatio * 0.5); // rear squat
-            } else if (input.throttle < 0 && physics.forwardSpeed > 2.0) {
-                targetPitch = 0.035 * Math.min(1, physics.forwardSpeed / 25); // nose dive
+            if (input.throttle > 0 && forwardSpeed > 0) {
+                targetPitch = -0.018 * (1 - speedRatio * 0.5); // rear squat on launch
+            } else if (input.throttle < 0 && forwardSpeed > 2.0) {
+                targetPitch = 0.035 * Math.min(1, forwardSpeed / 25); // nose dive
             }
             this.car.visual.rotation.x = THREE.MathUtils.lerp(
                 this.car.visual.rotation.x,
@@ -72,7 +73,7 @@ export class CarEffects {
 
         // ── 2. Dynamic Brake Light / Tail Glow Boost ───────────────────────────
         if (this.car.tailLight) {
-            const isBraking = (input.throttle < 0 && physics.forwardSpeed > 0.5) || input.handbrake;
+            const isBraking = (input.throttle < 0 && forwardSpeed > 0.5) || input.handbrake;
             const targetIntensity = isBraking ? 4.5 : 1.4;
             this.car.tailLight.intensity = THREE.MathUtils.lerp(
                 this.car.tailLight.intensity,

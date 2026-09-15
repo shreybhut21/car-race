@@ -20,7 +20,7 @@ import { VEHICLE_CONFIG } from '../car/CarPhysics.js';
 export function keepCarOnTrack(carMesh, track, physics, delta) {
     if (!track || !track.path || !physics) return;
 
-    const limit = track.halfWidth - 0.85;   // safe lateral boundary before barrier contact
+    const limit = track.halfWidth - 0.45;   // safe lateral boundary before barrier contact
     const { point, lateral, normal, tangent } = track.path.closestPoint(carMesh.position);
     const absLat = Math.abs(lateral);
 
@@ -34,19 +34,18 @@ export function keepCarOnTrack(carMesh, track, physics, delta) {
 
     // Lateral velocity component pointing into the barrier
     const latVel = physics.velocity.dot(normal) * sign;
-    const severity = THREE.MathUtils.clamp((latVel + Math.abs(physics.forwardSpeed) * 0.15) / 12.0, 0.05, 1.0);
+    const severity = THREE.MathUtils.clamp((latVel + Math.abs(physics.forwardSpeed) * 0.10) / 10.0, 0.05, 1.0);
 
     // Apply speed penalty and slide friction through CarPhysics
     physics.applyBarrierImpact(normal, penetration, severity, delta);
 
-    // Smoothly push car back inside drivable corridor (XZ only)
-    const correction = penetration + 0.02;
+    // Smoothly keep car inside drivable corridor without jerky teleports
+    const correction = Math.min(penetration, 0.35);
     carMesh.position.x -= normal.x * sign * correction;
     carMesh.position.z -= normal.z * sign * correction;
 
-    // Absorb and slightly reflect velocity away from barrier
+    // Absorb lateral velocity into the wall
     if (latVel > 0) {
-        // Cancel incoming normal velocity and apply mild restitution
         const cancelAmount = latVel * (1.0 + VEHICLE_CONFIG.BARRIER_RESTITUTION);
         physics.velocity.addScaledVector(normal, -sign * cancelAmount);
     }
@@ -54,13 +53,10 @@ export function keepCarOnTrack(carMesh, track, physics, delta) {
     // Align yaw gently toward track tangent to prevent crazy spins
     if (tangent) {
         const trackAngle = Math.atan2(tangent.x, tangent.z);
-        // Normalize angle difference
         let angleDiff = trackAngle - carMesh.rotation.y;
         while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
         while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-
-        // Dampen angular deviation during barrier contact
-        carMesh.rotation.y += angleDiff * VEHICLE_CONFIG.BARRIER_YAW_DAMPING * Math.min(delta * 6.0, 0.5);
+        carMesh.rotation.y += angleDiff * VEHICLE_CONFIG.BARRIER_YAW_DAMPING * Math.min(delta * 4.0, 0.3);
     }
 }
 
@@ -81,45 +77,15 @@ export function snapToRoadSurface(carMesh, track) {
 }
 
 /**
- * preventBacktracking – invisible one-way start barrier.
- *
- * @param {THREE.Object3D} carMesh  – car root object
- * @param {Track}          track    – Track instance (has track.path)
- * @param {CarPhysics}     physics  – CarPhysics instance
+ * preventBacktracking – no artificial invisible barriers.
  */
 export function preventBacktracking(carMesh, track, physics) {
-    if (!track || !track.path || !physics) return;
-
-    // Start line world position and forward tangent (t=0).
-    const startPos = track.path.getPointAt(0);
-    const startTan = track.path.getTangentAt(0);
-
-    // Signed distance along the start tangent from the start line to the car.
-    const dx       = carMesh.position.x - startPos.x;
-    const dz       = carMesh.position.z - startPos.z;
-    const projDist = startTan.x * dx + startTan.z * dz;
-
-    // Only enforce within 12 m of the start (doesn't affect the final approach).
-    if (projDist >= 0 || projDist < -12) return;
-
-    // Push car forward to the start line.
-    const push = -projDist + 0.06;
-    carMesh.position.x += startTan.x * push;
-    carMesh.position.z += startTan.z * push;
-
-    // Cancel backward velocity component
-    const tanVec = new THREE.Vector3(startTan.x, 0, startTan.z);
-    const backVel = physics.velocity.dot(tanVec);
-    if (backVel < 0) {
-        physics.velocity.x -= startTan.x * backVel;
-        physics.velocity.z -= startTan.z * backVel;
-        if (physics.forwardSpeed < 0) physics.forwardSpeed = 0;
-    }
+    // Open circuit: no artificial invisible walls blocking drive line
+    return;
 }
 
 /**
- * preventFinishOvershoot – physical dead-end collision barrier at the finish line.
- * Stops the car from advancing past the finish line barrier.
+ * preventFinishOvershoot – stops the car at the physical finish hazard barricade.
  *
  * @param {THREE.Object3D} carMesh  – car root object
  * @param {Track}          track    – Track instance (has track.path)
@@ -128,34 +94,32 @@ export function preventBacktracking(carMesh, track, physics) {
 export function preventFinishOvershoot(carMesh, track, physics) {
     if (!track || !track.path || !physics) return;
 
-    // Check if car is in the final sector approaching the finish line
-    const { t } = track.path.closestPoint(carMesh.position);
-    if (t < 0.88 || t > 0.96) return;
+    const { t, lateral } = track.path.closestPoint(carMesh.position);
 
-    const deadEndT = 0.916;
-    const barrierPos = track.path.getPointAt(deadEndT);
-    const barrierTan = track.path.getTangentAt(deadEndT);
+    // Strictly enforce ONLY at the final terminus of the lap (t >= 0.978)
+    if (t < 0.978) return;
 
-    // Vector from barrier to car
-    const dx = carMesh.position.x - barrierPos.x;
-    const dz = carMesh.position.z - barrierPos.z;
-    const projDist = barrierTan.x * dx + barrierTan.z * dz;
+    const deadEndPos = track.path.getPointAt(0.985);
+    const deadEndTan = track.path.getTangentAt(0.985);
 
-    // Stop distance: car center is held at 1.8m before the barrier face (accounting for front bumper)
-    const stopDistance = -1.8;
-    if (projDist > stopDistance) {
-        const overshoot = projDist - stopDistance;
-        carMesh.position.x -= barrierTan.x * overshoot;
-        carMesh.position.z -= barrierTan.z * overshoot;
+    const dx = carMesh.position.x - deadEndPos.x;
+    const dz = carMesh.position.z - deadEndPos.z;
+    const distSq = dx * dx + dz * dz;
 
-        // Cancel forward velocity into the barrier
-        const forwardVel = physics.velocity.x * barrierTan.x + physics.velocity.z * barrierTan.z;
-        if (forwardVel > 0) {
-            physics.velocity.x -= barrierTan.x * forwardVel;
-            physics.velocity.z -= barrierTan.z * forwardVel;
-            if (physics.forwardSpeed > 0) {
-                physics.forwardSpeed = 0;
-            }
+    // Must be physically within 18m of the barricade mesh on the road
+    if (distSq > 18 * 18) return;
+
+    const projDist = deadEndTan.x * dx + deadEndTan.z * dz;
+
+    // Stop car only at the barricade face
+    if (projDist >= -1.0 && projDist < 6.0 && Math.abs(lateral) <= track.halfWidth + 2.0) {
+        const clampOffset = projDist + 1.0;
+        carMesh.position.x -= deadEndTan.x * clampOffset;
+        carMesh.position.z -= deadEndTan.z * clampOffset;
+
+        if (physics.forwardSpeed > 0) {
+            physics.forwardSpeed = 0;
+            physics.velocity.set(0, 0, 0);
         }
     }
 }

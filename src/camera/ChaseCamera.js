@@ -8,12 +8,12 @@ export const CAMERA_MODES = [
         name: 'Horizon Low',
         shortName: 'Horizon',
         keyNumber: '1',
-        distance: 3,        // m behind car (tight framing)
-        height: 1.50,         // m above road surface (low bumper level)
-        lookAheadDist: 24.0,  // m ahead along road for horizon focus
-        lookHeight: 1.25,     // m height of look-target
-        baseFOV: 50,          // wide cinematic arcade FOV
-        maxFOV: 70,           // FOV at top speed
+        distance: 3.2,        // m behind car
+        height: 1.45,         // m above road
+        lookAheadDist: 26.0,  // m ahead along road
+        lookHeight: 1.2,      // m height of look-target
+        baseFOV: 65,          // natural wide arcade FOV
+        maxFOV: 80,           // subtle FOV expansion at 180 km/h
         lerpRate: 0.16,       // follow responsiveness
     },
     {
@@ -21,12 +21,12 @@ export const CAMERA_MODES = [
         name: 'High Chase',
         shortName: 'Chase',
         keyNumber: '2',
-        distance: 6.8,        // classic high third-person distance
-        height: 2.35,         // higher angle
-        lookAheadDist: 20.0,
-        lookHeight: 1.3,
+        distance: 6.5,        // classic third-person distance
+        height: 2.3,          // higher angle
+        lookAheadDist: 22.0,
+        lookHeight: 1.25,
         baseFOV: 62,
-        maxFOV: 80,
+        maxFOV: 76,
         lerpRate: 0.14,
     },
     {
@@ -35,11 +35,11 @@ export const CAMERA_MODES = [
         shortName: 'Bumper',
         keyNumber: '3',
         distance: -0.6,       // mounted on front hood
-        height: 0.9,
-        lookAheadDist: 32.0,
+        height: 0.88,
+        lookAheadDist: 34.0,
         lookHeight: 0.85,
         baseFOV: 78,
-        maxFOV: 96,
+        maxFOV: 94,
         lerpRate: 0.28,
     },
     {
@@ -49,7 +49,7 @@ export const CAMERA_MODES = [
         keyNumber: '4',
         distance: 12.0,       // far behind & above
         height: 8.5,
-        lookAheadDist: 10.0,
+        lookAheadDist: 12.0,
         lookHeight: 0.5,
         baseFOV: 55,
         maxFOV: 65,
@@ -133,15 +133,17 @@ export class ChaseCamera {
         car.getWorldQuaternion(this.worldRotation);
 
         // ── Desired camera position ───────────────────────────────────────
-        // Dynamic speed shake and distance reaction
         const shake = speedRatio * speedRatio;
         const dynamicDistance = this.activeConfig.distance > 0
-            ? this.activeConfig.distance + (speedRatio * 0.45)
+            ? this.activeConfig.distance + (speedRatio * 0.4)
             : this.activeConfig.distance;
 
+        const jitterX = Math.sin(time * 20.0) * 0.006 * shake;
+        const jitterY = Math.sin(time * 15.0) * 0.004 * shake;
+
         this.offset.set(
-            Math.sin(time * 18.0) * 0.006 * shake,
-            this.activeConfig.height + Math.sin(time * 13.0) * 0.004 * shake,
+            jitterX,
+            this.activeConfig.height + jitterY,
             -dynamicDistance
         ).applyQuaternion(this.worldRotation);
 
@@ -183,8 +185,7 @@ export class ChaseCamera {
 
         this.camera.lookAt(this.smoothedLookTarget);
 
-        // Dynamic speed-based FOV curve matching:
-        // 0-60 km/h: base FOV, 100 km/h: wider, 150 km/h: wider, 180 km/h: max FOV
+        // Dynamic speed-based FOV curve:
         const fovProgress = Math.pow(speedRatio, 1.25);
         const targetFov = THREE.MathUtils.lerp(
             this.activeConfig.baseFOV,
@@ -194,7 +195,7 @@ export class ChaseCamera {
         this.camera.fov = THREE.MathUtils.lerp(
             this.camera.fov,
             targetFov,
-            1 - Math.exp(-4 * delta)
+            1 - Math.exp(-5 * delta)
         );
         this.camera.updateProjectionMatrix();
     }

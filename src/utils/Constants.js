@@ -15,8 +15,8 @@ export const GAME_STATES = Object.freeze({
   RESULTS: 'results'
 });
 
-export const FINISH_T = 0.91;
-export const FINISH_DEAD_END_T = 0.916;
+export const FINISH_T = 0.96;
+export const FINISH_DEAD_END_T = 0.985;
 export const FINISH_BAND = 0.025;
 export const LEADERBOARD_SIZE = 5;
 export const LEADERBOARD_KEY = 'neonracer-leaderboard';

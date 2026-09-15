@@ -13,10 +13,16 @@ export class Car {
         this.visual = new THREE.Group();
         this.object.add(this.visual);
 
-        // 25 m down the first straight – clear of the green start line (z=0)
-        // and the start gantry (z=−10). Player sees open road immediately.
-        this.object.position.set(0, 0.46, 25);
-        this.object.rotation.y = 0;   // +Z is the first straight
+        // Spawn player 25m down the first straight (t=0.005), facing forward along the track
+        if (this.track && this.track.path) {
+            const frame = this.track.path.getFrameAt(0.005);
+            this.object.position.copy(frame.position).setY(frame.position.y + 0.46);
+            const rotY = Math.atan2(frame.tangent.x, frame.tangent.z);
+            this.object.rotation.set(0, rotY, 0);
+        } else {
+            this.object.position.set(-875, 0.46, 0);
+            this.object.rotation.y = Math.PI / 2;
+        }
 
         this.scene.add(this.object);
         this.addPresentationLighting();
@@ -33,33 +39,42 @@ export class Car {
     }
 
     addPresentationLighting() {
-        this.tailLight = new THREE.PointLight(0xff174d, 1.5, 6.0, 2);
-        this.tailLight.position.set(0, 0.6, -2.35);
-        this.object.add(this.tailLight);
-
-        this.underglow = new THREE.PointLight(0x8d2cff, 1.6, 6.5, 2);
-        this.underglow.position.set(0, -0.15, 0);
-        this.object.add(this.underglow);
-
-        this.bodyFill = new THREE.PointLight(0xd7e5ff, 2.8, 8.5, 2);
-        this.bodyFill.position.set(0, 2.2, -1.9);
-        this.object.add(this.bodyFill);
+        // Presentation lighting removed to prevent rear and ground light reflections
     }
 
-    loadModel() {
+    loadModel(modelPath = '/models/C44.glb') {
         const loader = new GLTFLoader();
 
         loader.load(
-            '/models/BMW%20330i.glb',
+            modelPath,
             (gltf) => {
                 const model = gltf.scene;
-                model.position.set(0, 0, 0);
-                model.scale.set(1.45, 1.45, 1.45);
+
+                // Compute bounding box for automatic scale and ground centering
+                const bbox = new THREE.Box3().setFromObject(model);
+                const size = bbox.getSize(new THREE.Vector3());
+                const center = bbox.getCenter(new THREE.Vector3());
+
+                // Center model at ground level (wheels on asphalt)
+                model.position.set(-center.x, -bbox.min.y, -center.z);
+
+                // Auto-orient if model length is aligned along X axis
+                if (size.x > size.z * 1.3) {
+                    model.rotation.y = Math.PI / 2;
+                }
+
+                // Auto-scale to realistic vehicle length (~5.0m for F1 / sports chassis)
+                const maxDim = Math.max(size.x, size.z);
+                if (maxDim > 0) {
+                    const targetLength = 5.0;
+                    const scaleFactor = targetLength / maxDim;
+                    this.visual.scale.set(scaleFactor, scaleFactor, scaleFactor);
+                }
 
                 model.traverse((child) => {
                     const name = (child.name || '').toLowerCase();
 
-                    // Hide stray asset artifacts from Sketchfab export
+                    // Hide stray asset artifacts if any
                     const isStray =
                         name === 'object_10' ||
                         name.startsWith('plane') ||
@@ -73,15 +88,26 @@ export class Car {
                     if (child.isMesh) {
                         child.castShadow = true;
                         child.receiveShadow = true;
+                        if (child.material) {
+                            if (child.material.roughness !== undefined) {
+                                child.material.roughness = Math.max(child.material.roughness, 0.35);
+                            }
+                            if (child.material.metalness !== undefined) {
+                                child.material.metalness = Math.min(child.material.metalness, 0.7);
+                            }
+                        }
                     }
                 });
 
                 this.visual.add(model);
-                console.log('BMW 330i loaded');
+                console.log('Vehicle model successfully loaded:', modelPath);
             },
             undefined,
             (error) => {
-                console.error('BMW loading failed:', error);
+                console.error('Failed to load C44.glb, falling back to BMW 330i:', error);
+                if (modelPath !== '/models/BMW%20330i.glb') {
+                    this.loadModel('/models/BMW%20330i.glb');
+                }
             }
         );
     }

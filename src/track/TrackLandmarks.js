@@ -14,7 +14,7 @@ export class TrackLandmarks {
     constructor(scene, track) {
         this.scene = scene;
         this.track = track;
-        this.path  = track.path;
+        this.path = track.path;
 
         this.group = new THREE.Group();
         this.scene.add(this.group);
@@ -24,71 +24,7 @@ export class TrackLandmarks {
         this._tempMat = new THREE.Matrix4();
         this._skyVehicles = [];
 
-        this._initTextures();
         this._buildLandmarks();
-    }
-
-    _initTextures() {
-        if (!this._windowTex) {
-            this._windowTex = this._createWindowAtlasTexture();
-        }
-    }
-
-    _createWindowAtlasTexture() {
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 512;
-        const ctx = canvas.getContext('2d');
-
-        // Dark architectural facade (tinted glass & dark composite panels)
-        ctx.fillStyle = '#0b0e17';
-        ctx.fillRect(0, 0, 512, 512);
-
-        // Realistic office floor grid
-        const rows = 32;
-        const cols = 16;
-        const padX = 6;
-        const padY = 5;
-        const wW = (512 / cols) - padX;
-        const wH = (512 / rows) - padY;
-
-        // Realistic modern city night window colors (warm incandescent, soft neutral white, golden office lights)
-        const realisticWindowColors = [
-            '#ffe6b8', // Warm office interior
-            '#fff0d0', // Warm incandescent
-            '#eef3ff', // Cool white office fluorescent
-            '#f5f7fa', // Neutral white office
-            '#ffd699', // Soft golden office
-            '#d4e5ff', // Soft skylight ambient reflection
-        ];
-
-        for (let r = 0; r < rows; r++) {
-            // Horizontal dark floor slab line
-            ctx.fillStyle = '#06080e';
-            ctx.fillRect(0, r * (512 / rows), 512, 2);
-
-            for (let c = 0; c < cols; c++) {
-                const x = c * (512 / cols) + padX / 2;
-                const y = r * (512 / rows) + padY / 2;
-
-                const rand = Math.random();
-                if (rand < 0.28) { // Realistic ~28% active office window occupancy
-                    const cIdx = Math.floor(Math.random() * realisticWindowColors.length);
-                    ctx.fillStyle = realisticWindowColors[cIdx];
-                    ctx.fillRect(x, y, wW, wH);
-                } else {
-                    ctx.fillStyle = '#101420'; // Dark unlit office glass
-                    ctx.fillRect(x, y, wW, wH);
-                }
-            }
-        }
-
-        const tex = new THREE.CanvasTexture(canvas);
-        tex.wrapS = THREE.RepeatWrapping;
-        tex.wrapT = THREE.RepeatWrapping;
-        tex.repeat.set(2, 6);
-        tex.anisotropy = 4;
-        return tex;
     }
 
     rebuild() {
@@ -112,7 +48,6 @@ export class TrackLandmarks {
 
     _buildLandmarks() {
         this._createTrackCanopy();
-        this._createDistantHorizonSkyline();
         this._createStreetlights();
         this._createHoloBillboards();
         this._createSkybridges();
@@ -123,18 +58,18 @@ export class TrackLandmarks {
     // ── 1. Covered Track Canopy (Overhead Arches, Glass Ceiling & Laser Spine) ──
 
     _createTrackCanopy() {
-        // Continuous canopy covering major sectors of the track
+        // Continuous canopy covering major sectors of the 4.5km circuit
         const canopySectors = [
-            { tStart: 0.03, tEnd: 0.28, ribs: 32 }, // Sector 1: Start Straight to Sweeping Turn
-            { tStart: 0.33, tEnd: 0.45, ribs: 18 }, // Sector 2: S-Curve Tech Corridor
-            { tStart: 0.58, tEnd: 0.89, ribs: 40 }, // Sector 3: Final High-Speed Canyon to Finish
+            { tStart: 0.02, tEnd: 0.18, ribs: 40 }, // Sector 1: Start Straight to Turn 1
+            { tStart: 0.50, tEnd: 0.62, ribs: 35 }, // Sector 2: Top Mega Straight
+            { tStart: 0.76, tEnd: 0.88, ribs: 40 }, // Sector 3: Western Carousel to Finish
         ];
 
         let totalRibs = 0;
         canopySectors.forEach(s => totalRibs += s.ribs);
 
         const ribSpanW = this.track.roadWidth + 3.0;
-        const ribH     = 7.6;
+        const ribH = 7.6;
 
         // Geometries
         const ribArchGeo = new THREE.BoxGeometry(ribSpanW, 0.26, 0.45);
@@ -174,11 +109,11 @@ export class TrackLandmarks {
         });
 
         // Instanced Meshes
-        const archMesh     = new THREE.InstancedMesh(ribArchGeo, ribNeonGlowMat, totalRibs);
-        const pillarsMesh  = new THREE.InstancedMesh(ribPillarGeo, ribStructureMat, totalRibs * 2);
-        const roofMesh     = new THREE.InstancedMesh(roofPanelGeo, glassRoofMat, totalRibs);
-        const spineLMesh   = new THREE.InstancedMesh(spineLightGeo, spineLaserMat, totalRibs);
-        const spineRMesh   = new THREE.InstancedMesh(spineLightGeo, ribNeonGlowMat, totalRibs);
+        const archMesh = new THREE.InstancedMesh(ribArchGeo, ribNeonGlowMat, totalRibs);
+        const pillarsMesh = new THREE.InstancedMesh(ribPillarGeo, ribStructureMat, totalRibs * 2);
+        const roofMesh = new THREE.InstancedMesh(roofPanelGeo, glassRoofMat, totalRibs);
+        const spineLMesh = new THREE.InstancedMesh(spineLightGeo, spineLaserMat, totalRibs);
+        const spineRMesh = new THREE.InstancedMesh(spineLightGeo, ribNeonGlowMat, totalRibs);
 
         const dummy = this._dummy;
         let rIdx = 0;
@@ -252,174 +187,7 @@ export class TrackLandmarks {
         this.group.add(archMesh, pillarsMesh, roofMesh, spineLMesh, spineRMesh);
     }
 
-    // ── 2. Floating Sky Islands & Levitating Megastructures ───────────────────
-
-    _createDistantHorizonSkyline() {
-        const totalIslands = 100;
-        const totalDebris  = 60;
-
-        // Geometries for floating islands and megastructures
-        const plateauGeo   = new THREE.CylinderGeometry(1, 0.88, 1, 7);
-        const keelGeo      = new THREE.ConeGeometry(1, 1, 7);
-        const antiGravGeo  = new THREE.TorusGeometry(1, 0.12, 8, 20);
-        const bodyGeo      = new THREE.BoxGeometry(1, 1, 1);
-        const capGeo       = new THREE.BoxGeometry(1, 0.4, 1);
-        const spireGeo     = new THREE.CylinderGeometry(0.1, 0.4, 1, 6);
-        const rockGeo      = new THREE.DodecahedronGeometry(1);
-
-        // Rocky Island Landmass Materials (Crag stone plateau & inverted deep keel)
-        const plateauMat = new THREE.MeshStandardMaterial({
-            color: 0x1c1e2c,
-            roughness: 0.85,
-            metalness: 0.2,
-        });
-
-        const keelMat = new THREE.MeshStandardMaterial({
-            color: 0x11131c,
-            roughness: 0.95,
-            metalness: 0.1,
-        });
-
-        // Anti-Gravity Levitator Plasma Core
-        const antiGravMat = new THREE.MeshStandardMaterial({
-            color: 0x00e5ff,
-            emissive: 0x0099ff,
-            emissiveIntensity: 2.2,
-            roughness: 0.2,
-            toneMapped: false,
-        });
-
-        // Realistic Architectural Skyscraper Facade
-        const buildingMat = new THREE.MeshStandardMaterial({
-            color: 0x141824,
-            map: this._windowTex,
-            emissiveMap: this._windowTex,
-            emissive: 0xffffff,
-            emissiveIntensity: 0.85,
-            roughness: 0.35,
-            metalness: 0.85,
-        });
-
-        // Architectural Rooftop Rim Wash
-        const capMat = new THREE.MeshStandardMaterial({
-            color: 0x222634,
-            emissive: 0xaaccff,
-            emissiveIntensity: 0.8,
-            roughness: 0.3,
-            metalness: 0.8,
-        });
-
-        // Red Aviation Warning Beacons
-        const spireMat = new THREE.MeshStandardMaterial({
-            color: 0xff1122,
-            emissive: 0xff0022,
-            emissiveIntensity: 2.0,
-            roughness: 0.2,
-        });
-
-        const plateauMesh  = new THREE.InstancedMesh(plateauGeo, plateauMat, totalIslands);
-        const keelMesh     = new THREE.InstancedMesh(keelGeo, keelMat, totalIslands);
-        const antiGravMesh = new THREE.InstancedMesh(antiGravGeo, antiGravMat, totalIslands);
-        const bodyMesh     = new THREE.InstancedMesh(bodyGeo, buildingMat, totalIslands);
-        const capMesh      = new THREE.InstancedMesh(capGeo, capMat, totalIslands);
-        const spireMesh    = new THREE.InstancedMesh(spireGeo, spireMat, totalIslands);
-        const debrisMesh   = new THREE.InstancedMesh(rockGeo, plateauMat, totalDebris);
-
-        const dummy = this._dummy;
-        const center = new THREE.Vector3(0, 0, 270);
-
-        for (let i = 0; i < totalIslands; i++) {
-            // Distribute in 3 expansive rings between 650m and 1300m away
-            const ring = i % 3;
-            const baseRadius = ring === 0 ? 680 : ring === 1 ? 920 : 1240;
-            const radius = baseRadius + ((i * 43) % 170);
-            const angle = (i / totalIslands) * Math.PI * 2 + ((i % 5) * 0.08);
-
-            const x = center.x + Math.cos(angle) * radius;
-            const z = center.z + Math.sin(angle) * radius;
-
-            // Island floating height in the air (suspended between 110m and 290m altitude)
-            const islandY = 110 + ((i * 37) % 180);
-            const islandR = 48 + (i % 6) * 11;       // Radius: 48m – 103m
-            const islandT = 22 + (i % 4) * 6;        // Thickness: 22m – 40m
-            const keelH   = 75 + (i % 5) * 22;       // Inverted rock keel depth: 75m – 163m
-
-            // 1. Upper Bedrock Plateau
-            dummy.position.set(x, islandY, z);
-            dummy.rotation.set(0, angle + Math.PI / 2, 0);
-            dummy.scale.set(islandR, islandT, islandR);
-            dummy.updateMatrix();
-            plateauMesh.setMatrixAt(i, dummy.matrix);
-
-            // 2. Inverted Rocky Underbelly Keel (hanging into open air void)
-            dummy.position.set(x, islandY - (islandT / 2) - (keelH / 2), z);
-            dummy.rotation.set(Math.PI, angle, 0); // Inverted upside down
-            dummy.scale.set(islandR * 0.95, keelH, islandR * 0.95);
-            dummy.updateMatrix();
-            keelMesh.setMatrixAt(i, dummy.matrix);
-
-            // 3. Glowing Anti-Gravity Thruster Repulsor Ring
-            dummy.position.set(x, islandY - (islandT / 2) - 3.0, z);
-            dummy.rotation.set(Math.PI / 2, 0, 0);
-            dummy.scale.set(islandR * 0.62, islandR * 0.62, 1);
-            dummy.updateMatrix();
-            antiGravMesh.setMatrixAt(i, dummy.matrix);
-
-            // 4. Skyscraper Building perched on the floating island
-            const bldgW = islandR * (0.62 + (i % 3) * 0.08);
-            const bldgD = islandR * (0.62 + ((i + 1) % 3) * 0.08);
-            const bldgH = 140 + ((i * 29) % 240); // Tower rises 140m – 380m above island
-
-            const bldgBaseY = islandY + (islandT / 2);
-            dummy.position.set(x, bldgBaseY + (bldgH / 2), z);
-            dummy.rotation.set(0, angle + Math.PI / 2 + ((i % 4) * 0.15), 0);
-            dummy.scale.set(bldgW, bldgH, bldgD);
-            dummy.updateMatrix();
-            bodyMesh.setMatrixAt(i, dummy.matrix);
-
-            // 5. Rooftop Cap
-            dummy.position.set(x, bldgBaseY + bldgH + 2.5, z);
-            dummy.scale.set(bldgW * 1.02, 5.0, bldgD * 1.02);
-            dummy.updateMatrix();
-            capMesh.setMatrixAt(i, dummy.matrix);
-
-            // 6. Antenna Beacon Spire
-            const spireH = 40 + (i % 6) * 10;
-            dummy.position.set(x, bldgBaseY + bldgH + 5.0 + (spireH / 2), z);
-            dummy.scale.set(4.0, spireH, 4.0);
-            dummy.updateMatrix();
-            spireMesh.setMatrixAt(i, dummy.matrix);
-        }
-
-        // Floating Satellite Micro-Islands & Debris Rocks drifting in the sky void
-        for (let j = 0; j < totalDebris; j++) {
-            const debRadius = 550 + ((j * 53) % 700);
-            const debAngle  = (j / totalDebris) * Math.PI * 2 + (j * 0.31);
-            const debX      = center.x + Math.cos(debAngle) * debRadius;
-            const debZ      = center.z + Math.sin(debAngle) * debRadius;
-            const debY      = 70 + ((j * 31) % 280);
-            const debScale  = 12 + (j % 7) * 4;
-
-            dummy.position.set(debX, debY, debZ);
-            dummy.rotation.set(j * 0.7, j * 1.1, j * 0.4);
-            dummy.scale.set(debScale, debScale * 1.3, debScale);
-            dummy.updateMatrix();
-            debrisMesh.setMatrixAt(j, dummy.matrix);
-        }
-
-        plateauMesh.instanceMatrix.needsUpdate  = true;
-        keelMesh.instanceMatrix.needsUpdate     = true;
-        antiGravMesh.instanceMatrix.needsUpdate = true;
-        bodyMesh.instanceMatrix.needsUpdate     = true;
-        capMesh.instanceMatrix.needsUpdate      = true;
-        spireMesh.instanceMatrix.needsUpdate    = true;
-        debrisMesh.instanceMatrix.needsUpdate   = true;
-
-        this.group.add(plateauMesh, keelMesh, antiGravMesh, bodyMesh, capMesh, spireMesh, debrisMesh);
-    }
-
-
-    // ── 3. Roadside Sci-Fi Streetlights (2 Draw Calls) ─────────────────────────
+    // ── 2. Roadside Sci-Fi Streetlights (2 Draw Calls) ─────────────────────────
 
     _createStreetlights() {
         const count = 48;
@@ -512,60 +280,143 @@ export class TrackLandmarks {
         this.group.add(bridgeMesh);
     }
 
-    // ── 5. Holographic Roadside Billboards ───────────────────────────────────────
+    // ── 5. Holographic Roadside Sponsor / Ad Billboards ────────────────────────
+    // Easily configurable for brand sponsors, ads, and custom image banners.
+    // 👉 HOW TO ADD YOUR OWN SPONSOR IMAGE:
+    // 1. Put your image (PNG/JPG) inside the "public/ads/" folder (e.g. "public/ads/my_ad.png").
+    // 2. Set imageSrc: '/ads/my_ad.png' on any billboard entry below!
 
     _createHoloBillboards() {
         const billboardsData = [
-            { t: 0.08, side: 1,  text1: 'NEO TOKYO', text2: '/// 2099 ///', color: '#00f0ff', emissive: 0x00d4ff },
-            { t: 0.22, side: -1, text1: 'CYBER DRIVE', text2: '⚡ HIGH SPEED', color: '#ff0077', emissive: 0xff0066 },
-            { t: 0.42, side: 1,  text1: 'SYNTH ENERGY', text2: 'MAX OVERCLOCK', color: '#00ffaa', emissive: 0x00ff88 },
-            { t: 0.62, side: -1, text1: 'QUANTUM NITRO', text2: 'HYPER PULSE', color: '#aa00ff', emissive: 0x9900ff },
-            { t: 0.78, side: 1,  text1: 'MATRIX GRID', text2: 'SYSTEM READY', color: '#ffbb00', emissive: 0xff9900 },
-            { t: 0.88, side: -1, text1: 'FINAL STRETCH', text2: 'PUSH TO LIMIT', color: '#ff0044', emissive: 0xff0022 },
+            // 🏁 1. START POINT GRAND SPONSOR BANNER (Visible immediately from car spawn / start grid)
+            {
+                t: 0.015,                      // Right near the start point
+                side: 1,                       // 1 = Right side of road, -1 = Left side
+                imageSrc: '/ads/2025-formula1-red-bull-racing-rb21-001-2000.jpg', // 🏎 Red Bull RB21 F1 Banner
+                sponsor: 'RED BULL RACING',
+                text1: 'ORACLE RED BULL',
+                text2: '⚡ RB21 FORMULA 1 ⚡',
+                color: '#ffaa00',
+                emissive: 0xff8800
+            },
+            // 2. Sector 1 Exit Billboard
+            {
+                t: 0.09,
+                side: -1,
+                imageSrc: null,                // 👉 Optional custom image path
+                sponsor: 'TITLE PARTNER',
+                text1: 'NEO ENERGY',
+                text2: '⚡ 100% SYNTHETIC OVERCLOCK',
+                color: '#00f0ff',
+                emissive: 0x00d4ff
+            },
+            // 3. Mid-Track / Turn 5 Billboard
+            {
+                t: 0.28,
+                side: 1,
+                imageSrc: '/ads/2025-formula1-red-bull-racing-rb21-001-2000.jpg', // 🏎 Red Bull RB21 F1 Banner
+                sponsor: 'RED BULL RACING',
+                text1: 'ORACLE RED BULL',
+                text2: '/// GIVES YOU WINGS ///',
+                color: '#ff0077',
+                emissive: 0xff0066
+            },
+            // 4. North Mega Straight Speed Trap Billboard
+            {
+                t: 0.62,
+                side: -1,
+                imageSrc: null,                // 👉 Optional custom image path
+                sponsor: 'PERFORMANCE LABS',
+                text1: 'APEX NITRO',
+                text2: 'HYPER PULSE BOOST SYSTEM',
+                color: '#00ffaa',
+                emissive: 0x00ff88
+            },
+            // 5. Western Carousel Billboard
+            {
+                t: 0.84,
+                side: 1,
+                imageSrc: '/ads/2025-formula1-red-bull-racing-rb21-001-2000.jpg', // 🏎 Red Bull RB21 F1 Banner
+                sponsor: 'RED BULL RACING',
+                text1: 'HORIZON MOTORS',
+                text2: 'THE FUTURE OF SPEED',
+                color: '#ffbb00',
+                emissive: 0xff9900
+            },
         ];
 
-        const boardGeo = new THREE.PlaneGeometry(14, 6.5);
-        const frameGeo = new THREE.BoxGeometry(14.4, 6.9, 0.5);
-        const trussGeo = new THREE.CylinderGeometry(0.18, 0.22, 16, 6);
+        // Billboard dimensions (22m wide x 10m high) for high visibility sponsor displays
+        const boardGeo = new THREE.PlaneGeometry(22, 10);
+        const frameGeo = new THREE.BoxGeometry(22.6, 10.6, 0.6);
+        const trussGeo = new THREE.CylinderGeometry(0.24, 0.32, 22, 8);
 
         const frameMat = new THREE.MeshStandardMaterial({
-            color: 0x161826, roughness: 0.3, metalness: 0.9,
+            color: 0x141624, roughness: 0.3, metalness: 0.9,
         });
+
+        const textureLoader = new THREE.TextureLoader();
 
         for (const data of billboardsData) {
             const { position, tangent, normal } = this.path.getFrameAt(data.t);
             const rotY = Math.atan2(tangent.x, tangent.z);
 
-            const tex = this._createBillboardTexture(data.text1, data.text2, data.color);
-            const boardMat = new THREE.MeshStandardMaterial({
-                map: tex,
-                transparent: true,
-                roughness: 0.2,
-                metalness: 0.5,
-                emissive: data.emissive,
-                emissiveIntensity: 1.5,
-                side: THREE.DoubleSide,
-            });
+            let boardMat;
 
-            const dist = this.track.halfWidth + 7.5;
+            // If user supplied an image path (e.g. '/ads/my_ad.png'), load the actual image file!
+            if (data.imageSrc) {
+                const imgTex = textureLoader.load(
+                    data.imageSrc,
+                    (loadedTex) => {
+                        loadedTex.colorSpace = THREE.SRGBColorSpace;
+                        loadedTex.needsUpdate = true;
+                    },
+                    undefined,
+                    (err) => console.error('Error loading billboard image:', data.imageSrc, err)
+                );
+                imgTex.colorSpace = THREE.SRGBColorSpace;
+                imgTex.anisotropy = 8;
+                boardMat = new THREE.MeshBasicMaterial({
+                    map: imgTex,
+                    side: THREE.DoubleSide,
+                    toneMapped: false,
+                });
+            } else {
+                // Procedural high-res holographic cyber ad generator
+                const tex = this._createBillboardTexture(data.sponsor, data.text1, data.text2, data.color);
+                boardMat = new THREE.MeshStandardMaterial({
+                    map: tex,
+                    transparent: true,
+                    roughness: 0.2,
+                    metalness: 0.4,
+                    emissive: data.emissive,
+                    emissiveIntensity: 1.6,
+                    side: THREE.DoubleSide,
+                });
+            }
+
+            // Placed at side of track (halfWidth + 14.5m)
+            const dist = this.track.halfWidth + 14.5;
             const centerPos = position.clone()
                 .addScaledVector(normal, data.side * dist)
-                .setY(position.y + 11.5);
+                .setY(position.y + 13.5);
 
             const boardGroup = new THREE.Group();
             boardGroup.position.copy(centerPos);
-            boardGroup.rotation.y = rotY + (data.side * -0.2);
+            // Rotate 180 degrees (+ Math.PI) so the billboard faces the oncoming approaching driver!
+            boardGroup.rotation.y = rotY + Math.PI + (data.side * 0.28);
 
             const boardMesh = new THREE.Mesh(boardGeo, boardMat);
+            boardMesh.position.z = 0.32; // In front of frame
             boardGroup.add(boardMesh);
 
             const frameMesh = new THREE.Mesh(frameGeo, frameMat);
-            frameMesh.position.z = -0.26;
+            frameMesh.position.z = 0.0;
             boardGroup.add(frameMesh);
 
-            for (const pSide of [-5.5, 5.5]) {
+            // Sturdy dual support pillars
+            for (const pSide of [-8.8, 8.8]) {
                 const truss = new THREE.Mesh(trussGeo, frameMat);
-                truss.position.set(pSide, -7.5, -0.3);
+                truss.position.set(pSide, -9.5, -0.1);
                 boardGroup.add(truss);
             }
 
@@ -573,50 +424,83 @@ export class TrackLandmarks {
         }
     }
 
-    _createBillboardTexture(title, subtitle, accentColor) {
+    _createBillboardTexture(sponsorTag, title, subtitle, accentColor) {
         const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 256;
+        canvas.width = 1024;
+        canvas.height = 512;
         const ctx = canvas.getContext('2d');
 
-        // Dark translucent gradient back
-        ctx.fillStyle = '#0a0d16';
-        ctx.fillRect(0, 0, 512, 256);
+        // Dark premium background with gradient
+        const bgGrad = ctx.createLinearGradient(0, 0, 1024, 512);
+        bgGrad.addColorStop(0, '#0a0d18');
+        bgGrad.addColorStop(1, '#060810');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, 1024, 512);
 
         // Tech grid lines
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
         ctx.lineWidth = 1.5;
-        for (let y = 0; y < 256; y += 24) {
+        for (let y = 0; y < 512; y += 32) {
             ctx.beginPath();
             ctx.moveTo(0, y);
-            ctx.lineTo(512, y);
+            ctx.lineTo(1024, y);
             ctx.stroke();
         }
 
-        // Outer glow frame
+        // Outer neon glow border
         ctx.strokeStyle = accentColor;
-        ctx.lineWidth = 6;
-        ctx.strokeRect(12, 12, 488, 232);
+        ctx.lineWidth = 10;
+        ctx.strokeRect(20, 20, 984, 472);
 
-        // Inner frame
-        ctx.strokeStyle = '#ffffff';
+        // Inner frame border
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(34, 34, 956, 444);
+
+        // Corner accent brackets
+        ctx.fillStyle = accentColor;
+        const bracketSize = 28;
+        ctx.fillRect(20, 20, bracketSize, 8);
+        ctx.fillRect(20, 20, 8, bracketSize);
+        ctx.fillRect(1004 - bracketSize, 20, bracketSize, 8);
+        ctx.fillRect(996, 20, 8, bracketSize);
+        ctx.fillRect(20, 484, bracketSize, 8);
+        ctx.fillRect(20, 492 - bracketSize, 8, bracketSize);
+        ctx.fillRect(1004 - bracketSize, 484, bracketSize, 8);
+        ctx.fillRect(996, 492 - bracketSize, 8, bracketSize);
+
+        // Top Sponsor Badge
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.fillRect(362, 46, 300, 42);
+        ctx.strokeStyle = accentColor;
         ctx.lineWidth = 2;
-        ctx.strokeRect(20, 20, 472, 216);
+        ctx.strokeRect(362, 46, 300, 42);
 
-        // Title text
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '900 46px sans-serif';
+        ctx.fillStyle = accentColor;
+        ctx.font = '800 20px monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(title, 256, 95);
+        ctx.fillText(`● ${sponsorTag || 'SPONSOR'} ●`, 512, 68);
 
-        // Subtitle text
+        // Main Brand / Ad Headline
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '900 82px sans-serif';
+        ctx.shadowColor = accentColor;
+        ctx.shadowBlur = 18;
+        ctx.fillText(title, 512, 230);
+        ctx.shadowBlur = 0;
+
+        // Subtitle / Promo Slogan
         ctx.fillStyle = accentColor;
-        ctx.font = '800 24px monospace';
-        ctx.fillText(subtitle, 256, 160);
+        ctx.font = '800 36px monospace';
+        ctx.fillText(subtitle, 512, 360);
+
+        // Bottom Decorative Bar
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.fillRect(150, 420, 724, 4);
 
         const tex = new THREE.CanvasTexture(canvas);
-        tex.anisotropy = 4;
+        tex.anisotropy = 8;
         return tex;
     }
 
@@ -635,13 +519,13 @@ export class TrackLandmarks {
 
         this.skyTrafficMesh = new THREE.InstancedMesh(craftGeo, craftMat, vehicleCount);
 
-        const center = new THREE.Vector3(0, 0, 270);
+        const center = new THREE.Vector3(-365, 0, 1050);
         for (let i = 0; i < vehicleCount; i++) {
             this._skyVehicles.push({
-                radius: 700 + (i % 4) * 150,
+                radius: 1800 + (i % 4) * 400,
                 angle: (i / vehicleCount) * Math.PI * 2,
-                speed: 0.04 + (i % 3) * 0.02,
-                altitude: 160 + (i % 4) * 35,
+                speed: 0.03 + (i % 3) * 0.015,
+                altitude: 180 + (i % 4) * 45,
             });
         }
 
@@ -658,7 +542,7 @@ export class TrackLandmarks {
 
         const dummy = this._dummy;
         const count = this._skyVehicles.length;
-        const center = new THREE.Vector3(0, 0, 270);
+        const center = new THREE.Vector3(-365, 0, 1050);
 
         for (let i = 0; i < count; i++) {
             const v = this._skyVehicles[i];
@@ -693,8 +577,8 @@ export class TrackLandmarks {
         });
 
         const bridgeTStart = 0.46;
-        const bridgeTEnd   = 0.58;
-        const archCount    = 6;
+        const bridgeTEnd = 0.58;
+        const archCount = 6;
 
         for (let i = 0; i <= archCount; i++) {
             const t = bridgeTStart + (bridgeTEnd - bridgeTStart) * (i / archCount);
@@ -717,9 +601,9 @@ export class TrackLandmarks {
             }
 
             if (i % 2 === 0) {
-                const archW   = this.track.roadWidth + 2;
+                const archW = this.track.roadWidth + 2;
                 const archGeo = new THREE.TorusGeometry(archW / 2, 0.14, 8, 20, Math.PI);
-                const arch    = new THREE.Mesh(archGeo, archMat);
+                const arch = new THREE.Mesh(archGeo, archMat);
                 arch.position.copy(position).setY(position.y + 2.1);
                 arch.quaternion.copy(quat);
                 arch.rotation.z = Math.PI / 2;

@@ -17,8 +17,4 @@ export function createLighting(scene) {
     key.shadow.camera.far    = 120;   // tighter far plane = sharper shadows
     scene.add(key);
 
-    // One subtle purple fill – no shadow needed.
-    const purpleFill = new THREE.PointLight(0x9c2cff, 14, 24, 2);
-    purpleFill.position.set(0, 2.2, 8);
-    scene.add(purpleFill);
 }

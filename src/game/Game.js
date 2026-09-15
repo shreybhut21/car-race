@@ -117,8 +117,16 @@ export class Game {
     }
 
     resetCar() {
-        this.car.object.position.set(0, 0.46, 25);
-        this.car.object.rotation.set(0, 0, 0);
+        if (this.track && this.track.path) {
+            const frame = this.track.path.getFrameAt(0.005);
+            this.car.object.position.copy(frame.position).setY(frame.position.y + 0.46);
+            const rotY = Math.atan2(frame.tangent.x, frame.tangent.z);
+            this.car.object.rotation.set(0, rotY, 0);
+        } else {
+            this.car.object.position.set(-875, 0.46, 0);
+            this.car.object.rotation.set(0, Math.PI / 2, 0);
+        }
+
         if (this.car.controller && this.car.controller.physics) {
             this.car.controller.physics.forwardSpeed = 0;
             this.car.controller.physics.velocity.set(0, 0, 0);

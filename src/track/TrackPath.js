@@ -19,8 +19,8 @@ export class TrackPath {
     constructor(mapConfig = null) {
         this.roadWidth  = 12;       // drivable surface width (m)
         this.halfWidth  = this.roadWidth / 2;
-        this._arcDiv    = 1200;
-        this._lutN      = 300;
+        this._arcDiv    = 2400;     // 2400 divisions for sub-meter spline precision on 4.5km circuit
+        this._lutN      = 800;      // 800-point LUT for zero-latency closest-point lookups
 
         this.setMapConfig(mapConfig);
     }
@@ -29,33 +29,52 @@ export class TrackPath {
      * Initializes or reconfigures the spline curve and banking from a map config.
      */
     setMapConfig(mapConfig) {
-        const defaultPts = [
-            new THREE.Vector3(   0,  0,    0),   //  0 – start/finish
-            new THREE.Vector3(   0,  0,  110),   //  1 – long straight
-            new THREE.Vector3(   0,  0,  200),   //  2 – straight end
-            new THREE.Vector3(  55,  0,  270),   //  3 – sweeping right apex
-            new THREE.Vector3( 120,  0,  310),   //  4 – right exit
-            new THREE.Vector3( 155,  0,  370),   //  5 – S-curve right
-            new THREE.Vector3( 130,  0,  420),   //  6 – S-curve left
-            new THREE.Vector3(  80,  0,  450),   //  7 – S-curve exit
-            new THREE.Vector3(  40,  1,  490),   //  8 – elevation start
-            new THREE.Vector3(   0,  8,  540),   //  9 – bridge apex
-            new THREE.Vector3( -55,  5,  570),   // 10 – bridge descent
-            new THREE.Vector3(-120,  0,  550),   // 11 – fast left apex
-            new THREE.Vector3(-160,  0,  490),   // 12 – fast left exit
-            new THREE.Vector3(-155,  0,  400),   // 13 – final straight start
-            new THREE.Vector3(-130,  0,  280),   // 14 – final straight
-            new THREE.Vector3( -95,  0,  160),   // 15 – final straight
-            new THREE.Vector3( -80,  0,   80),   // 16 – sweep left toward finish
-            new THREE.Vector3( -55,  0,   15),   // 17 – final hairpin, well left of start
+        const pts = (mapConfig && mapConfig.controlPoints) ? mapConfig.controlPoints : [
+            new THREE.Vector3( -900, 0,     0),
+            new THREE.Vector3( -600, 0,     0),
+            new THREE.Vector3( -420, 0,     0),
+            new THREE.Vector3( -260, 0,  -130),
+            new THREE.Vector3( -120, 0,  -150),
+            new THREE.Vector3(   30, 0,   -90),
+            new THREE.Vector3(  170, 0,    90),
+            new THREE.Vector3(  310, 0,   140),
+            new THREE.Vector3(  450, 0,   110),
+            new THREE.Vector3(  590, 0,   -70),
+            new THREE.Vector3(  720, 0,   -90),
+            new THREE.Vector3(  860, 0,     0),
+            new THREE.Vector3( 1000, 0,    60),
+            new THREE.Vector3( 1180, 0,   180),
+            new THREE.Vector3( 1380, 0,   420),
+            new THREE.Vector3( 1450, 0,   700),
+            new THREE.Vector3( 1450, 1,  1000),
+            new THREE.Vector3( 1350, 2,  1300),
+            new THREE.Vector3( 1150, 3,  1550),
+            new THREE.Vector3(  900, 2,  1750),
+            new THREE.Vector3(  650, 1,  1950),
+            new THREE.Vector3(  450, 0,  2050),
+            new THREE.Vector3(  280, 0,  2020),
+            new THREE.Vector3(  120, 0,  2100),
+            new THREE.Vector3(  -80, 0,  2060),
+            new THREE.Vector3( -400, 0,  2060),
+            new THREE.Vector3( -800, 0,  2060),
+            new THREE.Vector3(-1200, 0,  2060),
+            new THREE.Vector3(-1600, 0,  2060),
+            new THREE.Vector3(-1850, 0,  1950),
+            new THREE.Vector3(-2050, 1,  1750),
+            new THREE.Vector3(-2150, 2,  1450),
+            new THREE.Vector3(-2180, 3,  1100),
+            new THREE.Vector3(-2100, 3,   750),
+            new THREE.Vector3(-1900, 2,   450),
+            new THREE.Vector3(-1650, 1,   220),
+            new THREE.Vector3(-1400, 0,    80),
+            new THREE.Vector3(-1180, 0,    10),
+            new THREE.Vector3(-1020, 0,     0),
         ];
-
-        const pts = (mapConfig && mapConfig.controlPoints) ? mapConfig.controlPoints : defaultPts;
 
         // Closed Catmull-Rom spline (tension 0.5 = classic Catmull-Rom)
         this.curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.5);
 
-        // Arc-length cache – 1200 divisions gives < 0.2 m precision
+        // Arc-length cache – 2400 divisions gives < 0.2 m precision
         this._lengths = this.curve.getLengths(this._arcDiv);
         this.totalLength = this._lengths[this._arcDiv];
 
@@ -146,7 +165,7 @@ export class TrackPath {
             const dx  = worldPos.x - pt.x;
             const dz  = worldPos.z - pt.z;
             const dot = tan.x * dx + tan.z * dz;
-            t = THREE.MathUtils.clamp(t + dot * invLen, 0, 1);
+            t = ((t + dot * invLen) % 1.0 + 1.0) % 1.0;
         }
 
         const point   = this.curve.getPointAt(t);

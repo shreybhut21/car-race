@@ -1,9 +1,9 @@
 import { createLighting } from './Lighting.js';
-import { createSky } from './Sky.js';
+import { createSky, updateSkyTheme } from './Sky.js';
 import { addFog } from './Fog.js';
 
 export function createEnvironment(scene, mapConfig = null) {
-    createSky(scene);
+    createSky(scene, mapConfig);
     createLighting(scene);
     addFog(scene);
 }
@@ -11,6 +11,7 @@ export function createEnvironment(scene, mapConfig = null) {
 export function updateEnvironmentTheme(scene, mapConfig) {
     if (!mapConfig?.theme) return;
     scene.fog = null;
+    updateSkyTheme(mapConfig);
     if (scene.background) {
         scene.background.setHex(mapConfig.theme.skyBottom);
     }

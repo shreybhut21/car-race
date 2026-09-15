@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TrackPath } from './TrackPath.js';
+import { FINISH_T, FINISH_DEAD_END_T } from '../utils/Constants.js';
 
 /**
  * Track – generates every visual track element from TrackPath.
@@ -22,7 +23,7 @@ export class Track {
         this.path       = new TrackPath(mapConfig);
         this.roadWidth  = this.path.roadWidth;       // 12 m
         this.halfWidth  = this.path.halfWidth;       //  6 m
-        this._steps     = 300;
+        this._steps     = 800;                       // 800 steps for smooth curvature on 4.5km circuit
 
         // Container group to allow clean map reloading
         this.trackGroup = new THREE.Group();
@@ -76,14 +77,13 @@ export class Track {
     _build() {
         this._createRoad();
         this._createShoulders();
-        this._createLaneMarkings();
+        // this._createLaneMarkings(); // Disabled per user request (clean road)
         this._createNeonEdgeStrips();
         this._createBarriers();
         this._createChevrons();
         this._createStreetLights();
         this._createStartLine();
         this._createFinishLine();
-        this._createBarrierSpillLights();
     }
 
     // ── Shared geometry helpers ───────────────────────────────────────────
@@ -148,13 +148,10 @@ export class Track {
     // ── Road ──────────────────────────────────────────────────────────────
 
     _createRoad() {
-        const material = new THREE.MeshPhysicalMaterial({
-            color:              0x11151d,
-            roughness:          0.20,
-            metalness:          0.30,
-            clearcoat:          0.82,
-            clearcoatRoughness: 0.12,
-            reflectivity:       0.58,
+        const material = new THREE.MeshStandardMaterial({
+            color:              0x141722,
+            roughness:          0.92,
+            metalness:          0.05,
         });
         const geo  = this._buildRibbon(this._steps, -this.halfWidth, this.halfWidth);
         const road = new THREE.Mesh(geo, material);
@@ -179,7 +176,7 @@ export class Track {
 
     _createShoulders() {
         const material = new THREE.MeshStandardMaterial({
-            color: 0x171725, roughness: 0.36, metalness: 0.7,
+            color: 0x171725, roughness: 0.90, metalness: 0.05,
         });
         for (const side of [-1, 1]) {
             const inner = side * (this.halfWidth);
@@ -194,86 +191,7 @@ export class Track {
     // ── Lane markings ─────────────────────────────────────────────────────
 
     _createLaneMarkings() {
-        const emissiveColor = this.mapConfig?.theme?.laneEmissiveHex || 0x4d2b68;
-        const material = new THREE.MeshStandardMaterial({
-            color:             0xf8eaff,
-            emissive:          emissiveColor,
-            emissiveIntensity: 0.6,
-            roughness:         0.22,
-            metalness:         0.35,
-        });
-
-        const laneOffset = this.roadWidth / 3;    // ±4 m from centre
-        const dashLen    = 4.8;
-        const dashGap    = 7.2;                   // 12 m repeat
-        const dashWidth  = 0.12;
-
-        for (const lateralOffset of [-laneOffset / 2, laneOffset / 2]) {
-            let distAccum = 0;
-            let dashPhase = 0;
-            let dashStart = 0;
-
-            const totalLen = this.path.totalLength;
-            const step     = totalLen / this._steps;
-
-            const positions = [];
-            const norms     = [];
-            const uvArr     = [];
-            const idxArr    = [];
-            let   vtx       = 0;
-
-            const commitDash = (tStart, tEnd) => {
-                const segs = Math.max(2, Math.round((tEnd - tStart) * this._steps));
-                for (let s = 0; s <= segs; s++) {
-                    const t  = tStart + (tEnd - tStart) * (s / segs);
-                    const { position, tangent, normal } = this.path.getFrameAt(t);
-                    const cl  = position.clone().addScaledVector(normal, lateralOffset - dashWidth / 2).setY(position.y + 0.018);
-                    const cr  = position.clone().addScaledVector(normal, lateralOffset + dashWidth / 2).setY(position.y + 0.018);
-                    positions.push(cl.x, cl.y, cl.z, cr.x, cr.y, cr.z);
-                    norms.push(0, 1, 0, 0, 1, 0);
-                    uvArr.push(0, s / segs, 1, s / segs);
-                    if (s > 0) {
-                        const a = vtx - 2, b = vtx - 1, c = vtx, d = vtx + 1;
-                        idxArr.push(a, b, c, b, d, c);
-                    }
-                    vtx += 2;
-                }
-            };
-
-            let tPrev  = 0;
-            let inDash = true;
-            let segLen = dashLen;
-            let cursor = 0;
-
-            for (let i = 1; i <= this._steps; i++) {
-                const t   = i / this._steps;
-                const arc = t * totalLen;
-                while (cursor + segLen < arc) {
-                    if (inDash) {
-                        const tSeg = Math.min((cursor + segLen) / totalLen, 1);
-                        commitDash(tPrev, tSeg);
-                        tPrev = tSeg;
-                    } else {
-                        tPrev = Math.min((cursor + segLen) / totalLen, 1);
-                    }
-                    cursor += segLen;
-                    inDash  = !inDash;
-                    segLen  = inDash ? dashLen : dashGap;
-                }
-            }
-
-            if (positions.length === 0) continue;
-
-            const geo  = new THREE.BufferGeometry();
-            geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            geo.setAttribute('normal',   new THREE.Float32BufferAttribute(norms,     3));
-            geo.setAttribute('uv',       new THREE.Float32BufferAttribute(uvArr,     2));
-            geo.setIndex(idxArr);
-            geo.computeVertexNormals();
-            const mesh = new THREE.Mesh(geo, material);
-            mesh.renderOrder = 2;
-            this.trackGroup.add(mesh);
-        }
+        // Disabled per user request (clean road without lane lines)
     }
 
     // ── Neon edge strips ──────────────────────────────────────────────────
@@ -496,16 +414,6 @@ export class Track {
         heads.instanceMatrix.needsUpdate = true;
         poles.castShadow = true;
         this.trackGroup.add(poles, arms, heads);
-
-        const lightSpacing = 80;
-        const lightN       = Math.floor(total / lightSpacing);
-        for (let i = 0; i < lightN; i++) {
-            const t   = (i * lightSpacing) / total;
-            const pos = this.path.getPointAt(t);
-            const pl  = new THREE.PointLight(lightHex, 11, 27, 2);
-            pl.position.set(pos.x, pos.y + 4, pos.z);
-            this.trackGroup.add(pl);
-        }
     }
 
     // ── START line (t=0) ──────────────────────────────────────────────────
@@ -547,10 +455,12 @@ export class Track {
         this._createStartGantry(gantryPos, tangent, normal);
     }
 
-    // ── FINISH line (t=0.91) ─────────────────────────────────────────────
+    // ── FINISH line (t=FINISH_T) ─────────────────────────────────────────
+
+    // ── FINISH line (t=FINISH_T) & Barricade ─────────────────────────
 
     _createFinishLine() {
-        const t = 0.91;
+        const t = FINISH_T;
         const { position, tangent, normal } = this.path.getFrameAt(t);
         const rotY = Math.atan2(tangent.x, tangent.z);
 
@@ -593,22 +503,26 @@ export class Track {
             this.trackGroup.add(mesh);
         }
 
-        // 2. Overhead Finish Gantry
-        const pillarMat = new THREE.MeshStandardMaterial({
-            color: 0x1a1630, roughness: 0.3, metalness: 0.9,
-        });
-        const whiteFlagMat = new THREE.MeshStandardMaterial({
-            color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 1.5,
-            roughness: 0.2, toneMapped: false,
-        });
+        // 2. Overhead Grand Finish Banner & Gantry
+        const bannerW = this.roadWidth + 1.6;
+        const bannerH = 2.6;
+        const pH = 5.8;
+        const pOff = this.halfWidth + 1.0;
 
         const arcQuat = new THREE.Quaternion().setFromUnitVectors(
             new THREE.Vector3(0, 0, 1), tangent
         );
-        const pH  = 5;
-        const pOff = this.halfWidth + 0.8;
-        const pGeo = new THREE.CylinderGeometry(0.15, 0.18, pH, 8);
 
+        const pillarMat = new THREE.MeshStandardMaterial({
+            color: 0x141624, roughness: 0.3, metalness: 0.9,
+        });
+        const goldGlowMat = new THREE.MeshStandardMaterial({
+            color: 0xffaa00, emissive: 0xff8800, emissiveIntensity: 2.5,
+            roughness: 0.2, toneMapped: false,
+        });
+
+        // Support Pillars
+        const pGeo = new THREE.CylinderGeometry(0.22, 0.28, pH, 8);
         const lP = new THREE.Mesh(pGeo, pillarMat);
         lP.position.copy(position).addScaledVector(normal, -pOff).setY(position.y + pH / 2);
         this.trackGroup.add(lP);
@@ -617,221 +531,189 @@ export class Track {
         rP.position.copy(position).addScaledVector(normal, pOff).setY(position.y + pH / 2);
         this.trackGroup.add(rP);
 
-        const crossGeo = new THREE.BoxGeometry(this.roadWidth + 1.2, 0.24, 0.24);
+        // Cross truss
+        const crossGeo = new THREE.BoxGeometry(bannerW, 0.3, 0.3);
         const cross = new THREE.Mesh(crossGeo, pillarMat);
-        cross.position.copy(position).setY(position.y + pH);
+        cross.position.copy(position).setY(position.y + pH + 0.6);
         cross.quaternion.copy(arcQuat);
         this.trackGroup.add(cross);
 
-        const archGeo = new THREE.BoxGeometry(this.roadWidth + 1.3, 0.13, 0.13);
-        const arch = new THREE.Mesh(archGeo, whiteFlagMat);
-        arch.position.copy(position).setY(position.y + pH + 0.14);
+        // Glowing Finish Banner Board
+        const bannerTex = this._createFinishBannerTexture();
+        const bannerMat = new THREE.MeshStandardMaterial({
+            map: bannerTex,
+            transparent: true,
+            roughness: 0.2,
+            metalness: 0.3,
+            emissive: 0xffcc00,
+            emissiveIntensity: 1.8,
+            side: THREE.DoubleSide
+        });
+
+        const bannerGeo = new THREE.PlaneGeometry(bannerW, bannerH);
+        const bannerMesh = new THREE.Mesh(bannerGeo, bannerMat);
+        bannerMesh.position.copy(position).setY(position.y + pH - 0.7);
+        bannerMesh.quaternion.copy(arcQuat);
+        this.trackGroup.add(bannerMesh);
+
+        // Top Neon Crown Strip
+        const archGeo = new THREE.BoxGeometry(bannerW + 0.2, 0.16, 0.16);
+        const arch = new THREE.Mesh(archGeo, goldGlowMat);
+        arch.position.copy(position).setY(position.y + pH + 0.75);
         arch.quaternion.copy(arcQuat);
         this.trackGroup.add(arch);
 
-        const fl = new THREE.PointLight(0xffffff, 5, 14, 2);
-        fl.position.copy(position).setY(position.y + pH + 0.3);
-        this.trackGroup.add(fl);
-
-        // 3. DEAD END Physical & Visual Wall Barrier (t = 0.916)
-        this._createDeadEndBarrier();
+        // 3. Physical Finish Hazard Barricade (18m past the finish line)
+        this._createFinishBarricade();
     }
 
-    _createDeadEndBarrier() {
-        const deadEndT = 0.916;
-        const { position, tangent, normal } = this.path.getFrameAt(deadEndT);
-        const rotY = Math.atan2(tangent.x, tangent.z);
-        const wallQuat = new THREE.Quaternion().setFromUnitVectors(
-            new THREE.Vector3(0, 0, 1), tangent
-        );
-
-        const wallWidth = this.roadWidth + 3.8;
-        const wallHeight = 4.2;
-        const wallDepth = 1.4;
-
-        // Texture for the front face with hazard chevrons and DEAD END sign
-        const hazardTex = this._createDeadEndTexture();
-
-        const wallBaseMat = new THREE.MeshStandardMaterial({
-            color: 0x181a24,
-            roughness: 0.4,
-            metalness: 0.8,
-        });
-
-        const wallFrontMat = new THREE.MeshStandardMaterial({
-            map: hazardTex,
-            roughness: 0.25,
-            metalness: 0.6,
-            emissive: 0x331111,
-            emissiveIntensity: 0.4,
-        });
-
-        // 6-material array for BoxGeometry (right, left, top, bottom, front (+Z), back (-Z))
-        const wallMaterials = [
-            wallBaseMat,
-            wallBaseMat,
-            wallBaseMat,
-            wallBaseMat,
-            wallBaseMat,
-            wallFrontMat, // Back face facing incoming traffic (-Z in local orientation)
-        ];
-
-        const wallGeo = new THREE.BoxGeometry(wallWidth, wallHeight, wallDepth);
-        const wallMesh = new THREE.Mesh(wallGeo, wallMaterials);
-        wallMesh.position.copy(position).setY(position.y + wallHeight / 2);
-        wallMesh.quaternion.copy(wallQuat);
-        this.trackGroup.add(wallMesh);
-
-        // Neon warning rim on the barrier
-        const rimMat = new THREE.MeshStandardMaterial({
-            color: 0xff0055,
-            emissive: 0xff0044,
-            emissiveIntensity: 3.0,
-            roughness: 0.2,
-            toneMapped: false,
-        });
-        const topRim = new THREE.Mesh(new THREE.BoxGeometry(wallWidth + 0.2, 0.16, wallDepth + 0.1), rimMat);
-        topRim.position.copy(position).setY(position.y + wallHeight + 0.08);
-        topRim.quaternion.copy(wallQuat);
-        this.trackGroup.add(topRim);
-
-        // Heavy steel bumper rail at bottom of wall
-        const bumperMat = new THREE.MeshStandardMaterial({
-            color: 0x3a3d4d,
-            roughness: 0.3,
-            metalness: 0.95,
-        });
-        const bumperGeo = new THREE.BoxGeometry(wallWidth + 0.4, 0.6, 0.4);
-        const bumperMesh = new THREE.Mesh(bumperGeo, bumperMat);
-        bumperMesh.position.copy(position).addScaledVector(tangent, -wallDepth / 2 - 0.2).setY(position.y + 0.3);
-        bumperMesh.quaternion.copy(wallQuat);
-        this.trackGroup.add(bumperMesh);
-
-        // Impact attenuation crash barrels (6 barrels lined up in front of wall)
-        const barrelMat = new THREE.MeshStandardMaterial({
-            color: 0xffaa00,
-            emissive: 0xaa5500,
-            emissiveIntensity: 0.6,
-            roughness: 0.35,
-            metalness: 0.4,
-        });
-        const barrelRingMat = new THREE.MeshStandardMaterial({
-            color: 0x111111,
-            roughness: 0.5,
-            metalness: 0.8,
-        });
-
-        const barrelCount = 6;
-        const barrelSpacing = (this.roadWidth - 1.5) / (barrelCount - 1);
-
-        for (let b = 0; b < barrelCount; b++) {
-            const lat = -this.halfWidth + 0.75 + b * barrelSpacing;
-            const barrelGroup = new THREE.Group();
-
-            const barrelGeo = new THREE.CylinderGeometry(0.48, 0.48, 1.1, 16);
-            const bMesh = new THREE.Mesh(barrelGeo, barrelMat);
-            bMesh.position.y = 0.55;
-            barrelGroup.add(bMesh);
-
-            const ringGeo = new THREE.CylinderGeometry(0.50, 0.50, 0.18, 16);
-            const rMesh = new THREE.Mesh(ringGeo, barrelRingMat);
-            rMesh.position.y = 0.55;
-            barrelGroup.add(rMesh);
-
-            barrelGroup.position.copy(position)
-                .addScaledVector(normal, lat)
-                .addScaledVector(tangent, -wallDepth / 2 - 0.8)
-                .setY(position.y);
-            barrelGroup.rotation.y = rotY;
-            this.trackGroup.add(barrelGroup);
-        }
-
-        // Flashing Warning Beacons on Top Corners
-        const beaconMat = new THREE.MeshStandardMaterial({
-            color: 0xff2200,
-            emissive: 0xff0000,
-            emissiveIntensity: 4.0,
-            roughness: 0.1,
-            toneMapped: false,
-        });
-        const beaconGeo = new THREE.CylinderGeometry(0.2, 0.25, 0.5, 12);
-
-        for (const side of [-1, 1]) {
-            const beacon = new THREE.Mesh(beaconGeo, beaconMat);
-            beacon.position.copy(position)
-                .addScaledVector(normal, side * (wallWidth / 2 - 0.4))
-                .setY(position.y + wallHeight + 0.35);
-            beacon.quaternion.copy(wallQuat);
-            this.trackGroup.add(beacon);
-
-            const beaconLight = new THREE.PointLight(0xff1100, 6, 16, 2);
-            beaconLight.position.copy(beacon.position).setY(beacon.position.y + 0.3);
-            this.trackGroup.add(beaconLight);
-        }
-
-        // Heavy concrete side wing barriers connecting wall to ground shoulders
-        for (const side of [-1, 1]) {
-            const wingGeo = new THREE.BoxGeometry(0.8, wallHeight * 0.85, 3.2);
-            const wing = new THREE.Mesh(wingGeo, wallBaseMat);
-            wing.position.copy(position)
-                .addScaledVector(normal, side * (wallWidth / 2 - 0.1))
-                .addScaledVector(tangent, -1.2)
-                .setY(position.y + (wallHeight * 0.85) / 2);
-            wing.quaternion.copy(wallQuat);
-            this.trackGroup.add(wing);
-        }
-    }
-
-    _createDeadEndTexture() {
+    _createFinishBannerTexture() {
         const canvas = document.createElement('canvas');
         canvas.width = 1024;
         canvas.height = 256;
         const ctx = canvas.getContext('2d');
 
-        // Dark background
-        ctx.fillStyle = '#0a0d14';
+        // Dark carbon background
+        ctx.fillStyle = '#080a12';
         ctx.fillRect(0, 0, 1024, 256);
 
-        // Diagonal hazard stripes
-        ctx.save();
-        ctx.fillStyle = '#ffb300';
-        for (let x = -256; x < 1024 + 256; x += 64) {
+        // Checkered border on left & right
+        const squareSize = 24;
+        for (let y = 0; y < 256; y += squareSize) {
+            for (let x = 0; x < 144; x += squareSize) {
+                const isWhite = ((x / squareSize) + (y / squareSize)) % 2 === 0;
+                ctx.fillStyle = isWhite ? '#ffffff' : '#000000';
+                ctx.fillRect(x, y, squareSize, squareSize);
+                ctx.fillRect(1024 - 144 + x, y, squareSize, squareSize);
+            }
+        }
+
+        // Gold border frames
+        ctx.strokeStyle = '#ffaa00';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(144, 8, 1024 - 288, 240);
+
+        // Top tag
+        ctx.fillStyle = '#ffaa00';
+        ctx.font = '900 20px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('★ 5.5 KM GRAND PRIX ★', 512, 45);
+
+        // Main FINISH text
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '900 86px sans-serif';
+        ctx.shadowColor = '#ffaa00';
+        ctx.shadowBlur = 24;
+        ctx.fillText('🏁 FINISH 🏁', 512, 140);
+        ctx.shadowBlur = 0;
+
+        // Subtitle
+        ctx.fillStyle = '#ff8800';
+        ctx.font = '800 24px monospace';
+        ctx.fillText('/// FINAL LAP COMPLETE ///', 512, 210);
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.anisotropy = 8;
+        return tex;
+    }
+
+    _createFinishBarricade() {
+        const { position, tangent, normal } = this.path.getFrameAt(FINISH_DEAD_END_T);
+        const rotY = Math.atan2(tangent.x, tangent.z);
+        const arcQuat = new THREE.Quaternion().setFromUnitVectors(
+            new THREE.Vector3(0, 0, 1), tangent
+        );
+
+        const barW = this.roadWidth + 2.0;
+        const barH = 1.8;
+
+        const barrierGroup = new THREE.Group();
+        barrierGroup.position.copy(position).setY(position.y + barH / 2);
+        barrierGroup.quaternion.copy(arcQuat);
+
+        // Concrete Crash Barrier Base
+        const baseGeo = new THREE.BoxGeometry(barW, 0.7, 1.2);
+        const baseMat = new THREE.MeshStandardMaterial({
+            color: 0x222533, roughness: 0.6, metalness: 0.4
+        });
+        const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+        baseMesh.position.y = -0.55;
+        barrierGroup.add(baseMesh);
+
+        // Hazard Striped Crash Wall Panel
+        const hazardTex = this._createHazardTexture();
+        const wallMat = new THREE.MeshStandardMaterial({
+            map: hazardTex,
+            roughness: 0.3,
+            metalness: 0.5,
+            emissive: 0xff3300,
+            emissiveIntensity: 0.8
+        });
+        const wallGeo = new THREE.BoxGeometry(barW - 0.2, barH, 0.4);
+        const wallMesh = new THREE.Mesh(wallGeo, wallMat);
+        wallMesh.position.y = 0.1;
+        barrierGroup.add(wallMesh);
+
+        // Flashing Strobe Hazard Warning Lights on top
+        const strobeMat = new THREE.MeshStandardMaterial({
+            color: 0xff2200,
+            emissive: 0xff1100,
+            emissiveIntensity: 4.5,
+            toneMapped: false
+        });
+        const strobeGeo = new THREE.CylinderGeometry(0.16, 0.2, 0.35, 8);
+
+        for (let i = -4; i <= 4; i++) {
+            const strobe = new THREE.Mesh(strobeGeo, strobeMat);
+            strobe.position.set(i * (barW / 9), barH / 2 + 0.2, 0);
+            barrierGroup.add(strobe);
+        }
+
+        this.trackGroup.add(barrierGroup);
+    }
+
+    _createHazardTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1024;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+
+        // Black base
+        ctx.fillStyle = '#0a0a0f';
+        ctx.fillRect(0, 0, 1024, 256);
+
+        // Yellow / Orange hazard stripes
+        ctx.fillStyle = '#ffaa00';
+        const stripeW = 64;
+        for (let x = -256; x < 1280; x += stripeW * 2) {
             ctx.beginPath();
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x + 32, 0);
-            ctx.lineTo(x - 32, 256);
-            ctx.lineTo(x - 64, 256);
+            ctx.moveTo(x, 256);
+            ctx.lineTo(x + stripeW, 256);
+            ctx.lineTo(x + stripeW + 120, 0);
+            ctx.lineTo(x + 120, 0);
             ctx.closePath();
             ctx.fill();
         }
-        ctx.restore();
 
-        // Dark central badge
-        ctx.fillStyle = 'rgba(10, 12, 18, 0.94)';
-        ctx.fillRect(80, 40, 1024 - 160, 176);
-        ctx.strokeStyle = '#ff0055';
+        // Center Warning Box
+        ctx.fillStyle = 'rgba(10, 10, 16, 0.9)';
+        ctx.fillRect(200, 50, 624, 156);
+        ctx.strokeStyle = '#ff3300';
         ctx.lineWidth = 6;
-        ctx.strokeRect(80, 40, 1024 - 160, 176);
+        ctx.strokeRect(200, 50, 624, 156);
 
-        // Inner glowing border
-        ctx.strokeStyle = '#00e5ff';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(92, 52, 1024 - 184, 152);
-
-        // Bold warning text
         ctx.fillStyle = '#ffffff';
-        ctx.font = '900 44px sans-serif';
+        ctx.font = '900 42px sans-serif';
         ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('///  DEAD END  —  FINISH LINE  ///', 512, 105);
+        ctx.fillText('⚠ ROAD CLOSED ⚠', 512, 115);
 
-        ctx.fillStyle = '#ff0055';
-        ctx.font = '800 24px monospace';
-        ctx.fillText('TRACK TERMINATION • FINISH BARRIER', 512, 160);
+        ctx.fillStyle = '#ffaa00';
+        ctx.font = '800 26px monospace';
+        ctx.fillText('RACE CIRCUIT TERMINUS', 512, 165);
 
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.anisotropy = 8;
-        return texture;
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.RepeatWrapping;
+        return tex;
     }
 
 
@@ -886,25 +768,4 @@ export class Track {
         }
     }
 
-    // ── Barrier spill lights ──────────────────────────────────────────────
-
-    _createBarrierSpillLights() {
-        const spillHex = this.mapConfig?.theme?.barrierLeftHex || 0xa92dff;
-        const spacing = 80;
-        const total   = this.path.totalLength;
-        const count   = Math.floor(total / spacing);
-
-        for (let i = 0; i < count; i++) {
-            const t   = (i * spacing) / total;
-            const { position, normal } = this.path.getFrameAt(t);
-
-            for (const side of [-1, 1]) {
-                const pl = new THREE.PointLight(spillHex, 3.7, 11, 2);
-                pl.position.copy(position)
-                  .addScaledVector(normal, side * (this.halfWidth + 0.55))
-                  .setY(position.y + 0.38);
-                this.trackGroup.add(pl);
-            }
-        }
-    }
 }
